@@ -4,33 +4,99 @@ from typing import Optional, List
 
 app = FastAPI()
 
-# Product Data
+# Initial Products List
 products = [
     {"id": 1, "name": "Wireless Mouse", "price": 499, "category": "Electronics", "in_stock": True},
     {"id": 2, "name": "Notebook", "price": 99, "category": "Stationery", "in_stock": True},
     {"id": 3, "name": "USB Hub", "price": 799, "category": "Electronics", "in_stock": False},
     {"id": 4, "name": "Pen Set", "price": 49, "category": "Stationery", "in_stock": True},
-    {"id": 5, "name": "Keyboard", "price": 899, "category": "Electronics", "in_stock": True},
-    {"id": 6, "name": "Desk Lamp", "price": 699, "category": "Electronics", "in_stock": True},
-    {"id": 7, "name": "Sticky Notes", "price": 79, "category": "Stationery", "in_stock": True}
+    {"id": 5, "name": "Laptop Stand", "price": 899, "category": "Electronics", "in_stock": True},
+    {"id": 6, "name": "Mechanical Keyboard", "price": 2499, "category": "Electronics", "in_stock": True},
+    {"id": 7, "name": "Webcam", "price": 1299, "category": "Electronics", "in_stock": False}
 ]
 
-# Basic Endpoints
+# ---------------- DAY 1 ----------------
+
 @app.get("/")
 def home():
     return {"message": "Welcome to the E-commerce API"}
 
+# Q1 — Show All Products
 @app.get("/products")
 def get_products():
-    return products
+    return {"products": products, "total": len(products)}
 
-# Q1 Filter Products
+# Q2 — Filter Products by Category
+@app.get("/products/category/{category_name}")
+def get_products_by_category(category_name: str):
+    filtered = [p for p in products if p["category"].lower() == category_name.lower()]
+
+    if not filtered:
+        return {"error": "No products found in this category"}
+
+    return {"products": filtered}
+
+# Q3 — Show Only In-Stock Products
+@app.get("/products/instock")
+def get_instock_products():
+    instock = [p for p in products if p["in_stock"]]
+
+    return {
+        "in_stock_products": instock,
+        "count": len(instock)
+    }
+
+# Q4 — Store Summary
+@app.get("/store/summary")
+def store_summary():
+    total = len(products)
+    instock = len([p for p in products if p["in_stock"]])
+    outstock = total - instock
+    categories = list(set(p["category"] for p in products))
+
+    return {
+        "store_name": "My E-commerce Store",
+        "total_products": total,
+        "in_stock": instock,
+        "out_of_stock": outstock,
+        "categories": categories
+    }
+
+# Q5 — Search Products by Name
+@app.get("/products/search/{keyword}")
+def search_products(keyword: str):
+
+    matched = [p for p in products if keyword.lower() in p["name"].lower()]
+
+    if not matched:
+        return {"message": "No products matched your search"}
+
+    return {
+        "matched_products": matched,
+        "count": len(matched)
+    }
+
+# ⭐ Bonus — Cheapest & Most Expensive Product
+@app.get("/products/deals")
+def product_deals():
+    cheapest = min(products, key=lambda x: x["price"])
+    expensive = max(products, key=lambda x: x["price"])
+
+    return {
+        "best_deal": cheapest,
+        "premium_pick": expensive
+    }
+
+# ---------------- DAY 2 ----------------
+
+# Q1 — Filter Products by Price
 @app.get("/products/filter")
 def filter_products(
     category: Optional[str] = None,
     max_price: Optional[int] = None,
     min_price: Optional[int] = None
 ):
+
     filtered = products
 
     if category:
@@ -44,19 +110,18 @@ def filter_products(
 
     return filtered
 
-# Q4 Product Summary Dashboard
+# Q4 — Product Summary Dashboard
 @app.get("/products/summary")
 def product_summary():
 
     total_products = len(products)
-
     in_stock = [p for p in products if p["in_stock"]]
     out_stock = [p for p in products if not p["in_stock"]]
 
     cheapest = min(products, key=lambda x: x["price"])
     expensive = max(products, key=lambda x: x["price"])
 
-    categories = sorted(set(p["category"] for p in products))
+    categories = list(set(p["category"] for p in products))
 
     return {
         "total_products": total_products,
@@ -70,25 +135,25 @@ def product_summary():
 # Get Product by ID
 @app.get("/products/{product_id}")
 def get_product(product_id: int):
-    for product in products:
-        if product["id"] == product_id:
-            return product
+    for p in products:
+        if p["id"] == product_id:
+            return p
     return {"error": "Product not found"}
 
-# Q2 Get Only Product Price
+# Q2 — Get Only Product Price
 @app.get("/products/{product_id}/price")
 def get_product_price(product_id: int):
 
-    for product in products:
-        if product["id"] == product_id:
+    for p in products:
+        if p["id"] == product_id:
             return {
-                "name": product["name"],
-                "price": product["price"]
+                "name": p["name"],
+                "price": p["price"]
             }
 
     return {"error": "Product not found"}
 
-# Q3 Customer Feedback
+# Q3 — Customer Feedback
 feedback = []
 
 class CustomerFeedback(BaseModel):
@@ -108,7 +173,7 @@ def submit_feedback(data: CustomerFeedback):
         "total_feedback": len(feedback)
     }
 
-# Q5 Bulk Orders
+# Q5 — Bulk Orders
 class OrderItem(BaseModel):
     product_id: int = Field(..., gt=0)
     quantity: int = Field(..., ge=1, le=50)
@@ -130,17 +195,11 @@ def bulk_order(order: BulkOrder):
         product = next((p for p in products if p["id"] == item.product_id), None)
 
         if not product:
-            failed.append({
-                "product_id": item.product_id,
-                "reason": "Product not found"
-            })
+            failed.append({"product_id": item.product_id, "reason": "Product not found"})
             continue
 
         if not product["in_stock"]:
-            failed.append({
-                "product_id": item.product_id,
-                "reason": f"{product['name']} is out of stock"
-            })
+            failed.append({"product_id": item.product_id, "reason": f"{product['name']} is out of stock"})
             continue
 
         subtotal = product["price"] * item.quantity
@@ -159,7 +218,7 @@ def bulk_order(order: BulkOrder):
         "grand_total": grand_total
     }
 
-# Bonus Order Tracker
+# ⭐ Bonus — Order Tracker
 orders = []
 
 class Order(BaseModel):
